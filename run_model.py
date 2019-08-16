@@ -14,6 +14,7 @@ LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
 width, height = 10, 20 # standard tetris friends rules
 engine = TetrisEngine(width, height)
 
+
 def load_model(filename):
     model = DQN()
     if use_cuda:
@@ -23,17 +24,16 @@ def load_model(filename):
 
     return model
 
+
 def run(model):
-    state = FloatTensor(engine.clear()[None,None,:,:])
+    state = FloatTensor(engine.clear()[None, None, :, :])
     score = 0
     while True:
-        action = model(Variable(state,
-            volatile=True).type(FloatTensor)).data.max(1)[1].view(1,1).type(LongTensor)
-        print( model(Variable(state,
-            volatile=True).type(FloatTensor)).data)
+        action = model(Variable(state, volatile=True).type(FloatTensor)).data.max(1)[1].view(1, 1).type(LongTensor)
+        print(model(Variable(state, volatile=True).type(FloatTensor)).data)
 
-        state, reward, done = engine.step(int(action[0,0]))
-        state = FloatTensor(state[None,None,:,:])
+        state, reward, done = engine.step(int(action[0, 0]))
+        state = FloatTensor(state[None, None, :, :])
 
         # Accumulate reward
         score += int(reward)

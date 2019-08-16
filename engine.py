@@ -64,6 +64,7 @@ def rotate_right(shape, anchor, board):
     new_shape = rotated(shape, cclk=True)
     return (shape, anchor) if is_occupied(new_shape, anchor, board) else (new_shape, anchor)
 
+
 def idle(shape, anchor, board):
     return (shape, anchor)
 
@@ -99,6 +100,15 @@ class TetrisEngine:
 
         # clear after initializing
         self.clear()
+
+    def copy(self):
+        engine = TetrisEngine(self.width, self.height)
+        engine.board = np.copy(self.board)
+        engine.time = self.time
+        engine.score = self.score
+        engine.shape = self.shape
+        engine.n_deaths = self.n_deaths
+        return engine
 
     def _choose_shape(self):
         maxm = max(self._shape_counts)
