@@ -237,9 +237,7 @@ def optimize_model():
     for param in model.parameters():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
-    
-    if len(loss.data)>0 : return loss.data[0] 
-    else : return loss
+    return float(loss.data)
 
 def optimize_supervised(pred, targ):
     optimizer.zero_grad()
@@ -301,7 +299,7 @@ if __name__ == '__main__':
 
             # Observations
             last_state = state
-            state, reward, done = engine.step(action[0,0])
+            state, reward, done = engine.step(int(action[0,0]))
             state = FloatTensor(state[None,None,:,:])
             
             # Accumulate reward
@@ -318,6 +316,7 @@ if __name__ == '__main__':
                     log = 'epoch {0} score {1}'.format(i_episode, score)
                     print(log)
                     f.write(log + '\n')
+                    f.flush()
                     loss = optimize_model()
                     if loss:
                         print('loss: {:.0f}'.format(loss))
