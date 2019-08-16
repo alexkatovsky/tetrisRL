@@ -13,8 +13,8 @@ def animate(i):
     for eachLine in dataArray:
         if len(eachLine)>1:
             _, x, _, y = eachLine.strip().split(' ')
-            xar.append(int(x))
-            yar.append(int(y))
+            xar.append(float(x))
+            yar.append(float(y))
     ax1.clear()
     ax1.scatter(xar,yar)
 

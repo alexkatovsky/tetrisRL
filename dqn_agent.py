@@ -139,9 +139,8 @@ memory = ReplayMemory(3000)
 def select_action(state):
     global steps_done
     sample = random.random()
-    # eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-    #     math.exp(-1. * steps_done / EPS_DECAY)
-    eps_threshold = 0.5
+    # eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
+    eps_threshold = 0.9
     steps_done += 1
     if sample > eps_threshold:
         return model(
@@ -304,7 +303,7 @@ if __name__ == '__main__':
             state = FloatTensor(state[None,None,:,:])
             
             # Accumulate reward
-            score += int(reward)
+            score += float(reward)
 
             reward = FloatTensor([float(reward)])
             # Store the transition in memory
@@ -313,7 +312,7 @@ if __name__ == '__main__':
             # Perform one step of the optimization (on the target network)
             if done:
                 # Train model
-                if i_episode % 10 == 0:
+                if i_episode % 1 == 0:
                     log = 'epoch {0} score {1}'.format(i_episode, score)
                     print(log)
                     f.write(log + '\n')

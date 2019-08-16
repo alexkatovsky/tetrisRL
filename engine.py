@@ -134,7 +134,7 @@ class TetrisEngine:
         return valid_action_sum
 
     def temperature(self):
-        return self.anchor[1]
+        return (float(self.anchor[1])) ** 2 / ((float(self.height) - 1.0) ** 2)
 
     def step(self, action):
         self.anchor = (int(self.anchor[0]), int(self.anchor[1]))
