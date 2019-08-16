@@ -6,7 +6,7 @@ fig = plt.figure()
 ax1 = fig.add_subplot(1,1,1)
 
 def animate(i):
-    pullData = open("log2.out","r").read()
+    pullData = open("log.out","r").read()
     dataArray = pullData.split('\n')
     xar = []
     yar = []
