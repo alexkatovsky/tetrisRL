@@ -139,8 +139,9 @@ memory = ReplayMemory(3000)
 def select_action(state):
     global steps_done
     sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
+    # eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+    #     math.exp(-1. * steps_done / EPS_DECAY)
+    eps_threshold = 0.5
     steps_done += 1
     if sample > eps_threshold:
         return model(
@@ -322,14 +323,12 @@ if __name__ == '__main__':
                         print('loss: {:.0f}'.format(loss))
                 # Checkpoint
                 if i_episode % 100 == 0:
-                    is_best = True if score > best_score else False
                     save_checkpoint({
-                        'epoch' : i_episode,
-                        'state_dict' : model.state_dict(),
-                        'best_score' : best_score,
-                        'optimizer' : optimizer.state_dict(),
-                        'memory' : memory
-                        }, is_best)
+                        'epoch': i_episode,
+                        'state_dict': model.state_dict(),
+                        'best_score': best_score,
+                        'optimizer': optimizer.state_dict(),
+                        'memory': memory}, True)
                 break
 
     f.close()

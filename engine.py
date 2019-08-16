@@ -4,16 +4,10 @@ import numpy as np
 import random
 
 shapes = {
-    'T': [(0, 0), (-1, 0), (1, 0), (0, -1)],
-    'J': [(0, 0), (-1, 0), (0, -1), (0, -2)],
-    'L': [(0, 0), (1, 0), (0, -1), (0, -2)],
-    'Z': [(0, 0), (-1, 0), (0, -1), (1, -1)],
-    'S': [(0, 0), (-1, -1), (0, -1), (1, 0)],
-    'I': [(0, 0), (0, -1), (0, -2), (0, -3)],
     'O': [(0, 0), (0, -1), (-1, 0), (-1, -1)],
 }
-shape_names = ['T', 'J', 'L', 'Z', 'S', 'I', 'O']
-
+# shape_names = ['T', 'J', 'L', 'Z', 'S', 'I', 'O']
+shape_names = ["O"]
 
 def rotated(shape, cclk=False):
     if cclk:
@@ -76,13 +70,9 @@ class TetrisEngine:
 
         # actions are triggered by letters
         self.value_action_map = {
-            0: left,
-            1: right,
-            2: hard_drop,
-            3: soft_drop,
-            4: rotate_left,
-            5: rotate_right,
-            6: idle,
+            0: right,
+            1: left,
+            2: idle,
         }
         self.action_value_map = dict([(j, i) for i, j in self.value_action_map.items()])
         self.nb_actions = len(self.value_action_map)
@@ -154,11 +144,12 @@ class TetrisEngine:
 
         # Update time and reward
         self.time += 1
-        reward = self.valid_action_count() + self.temperature()
+        reward = 0
         #reward = 1
 
         done = False
         if self._has_dropped():
+            reward = self.temperature()
             self._set_piece(True)
             reward += 10 * self._clear_lines()
             if np.any(self.board[:, 0]):
