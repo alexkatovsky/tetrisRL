@@ -120,7 +120,7 @@ GAMMA = 0.999
 EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 200
-CHECKPOINT_FILE = 'checkpoint.pth.tar'
+CHECKPOINT_FILE = 'checkpoint-temperature.pth.tar'
 
 
 steps_done = 0
@@ -246,7 +246,7 @@ def optimize_supervised(pred, targ):
     diff.backward()
     optimizer.step()
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, filename=CHECKPOINT_FILE):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, 'model_best.pth.tar')

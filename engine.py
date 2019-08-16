@@ -143,6 +143,9 @@ class TetrisEngine:
 
         return valid_action_sum
 
+    def temperature(self):
+        return self.anchor[1]
+
     def step(self, action):
         self.anchor = (int(self.anchor[0]), int(self.anchor[1]))
         self.shape, self.anchor = self.value_action_map[action](self.shape, self.anchor, self.board)
@@ -151,7 +154,7 @@ class TetrisEngine:
 
         # Update time and reward
         self.time += 1
-        reward = self.valid_action_count()
+        reward = self.valid_action_count() + self.temperature()
         #reward = 1
 
         done = False
