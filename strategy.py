@@ -22,13 +22,14 @@ class Strategy:
         while True:
             action = self.get_action(engine.copy())
             if action is None:
-                break
-            state, reward, done = engine.step(action)
-            score += int(reward)
-            if not simulation:
-                print(engine)
-                print(action)
-                # time.sleep(.05)
+                done = True
+            else:
+                state, reward, done = engine.step(action)
+                score += int(reward)
+                if not simulation:
+                    print(engine)
+                    print(action)
+                    # time.sleep(.05)
             if done:
                 if not simulation:
                     print('score {0}'.format(score))
@@ -53,8 +54,8 @@ class Evaluator:
 
     def value(self, engine):
         if self._array is None:
-            self._array = np.array([(engine.board.shape[0] - x - 1) ** 2 for x in range(engine.board.shape[0])])
-        return -engine.board.sum(axis=1).dot(self._array) - 999999 * engine.n_deaths
+            self._array = np.array([(engine.board.shape[1] - x - 1) ** 2 for x in range(engine.board.shape[1])])
+        return -engine.board.sum(axis=0).dot(self._array) - 999999 * engine.n_deaths
 
 
 class MCStrategy(Strategy):
@@ -88,20 +89,22 @@ class MCStrategy(Strategy):
 
 class BeamSearchStrategy(Strategy):
     class Node:
-        def __init__(self, engine):
-            self.engine = engine
+        def __init__(self, engine, prev_actions, evaluator):
+            self.engine = engine.copy()
+            self.engine.execute_action(prev_actions[-1])
+            self.actions = prev_actions
+            self.evaluator = evaluator
+            self.value = -evaluator.value(self.engine)
+
+        def get_initial_action(self):
+            return self.actions[0].action
 
         def new_node(self, action):
-            engine = self.engine.copy()
-            engine.execute_action(action)
-            return BeamSearchStrategy.Node(engine)
+            return BeamSearchStrategy.Node(self.engine, self.actions + [action], self.evaluator)
 
         def get_possible_actions_at_next_step(self):
             player_actions = self.engine.get_player_actions()
             oponent_actions = self.engine.get_oponent_actions()
-            # random.shuffle(oponent_actions)
-            if oponent_actions:
-                oponent_actions = [oponent_actions[0], oponent_actions[5]]
             return player_actions, oponent_actions
 
     def __init__(self, beam_width=5, depth=20, evaluator=None):
@@ -109,35 +112,30 @@ class BeamSearchStrategy(Strategy):
         self._depth = depth
         self._evaluator = Evaluator() if evaluator is None else evaluator
 
-    def _search_best(self, parent_node, start_depth):
-        nodes = [parent_node]
-        values = []
+    def _search(self, nodes, start_depth):
+        final_nodes = []
         for depth in range(start_depth, self._depth):
             new_nodes = []
             for node in nodes:
                 player_actions, oponent_actions = node.get_possible_actions_at_next_step()
                 if oponent_actions:
-                    oponent_values = []
-                    for action in oponent_actions:
-                        new_node = node.new_node(action)
-                        best_value = self._search_best(new_node, depth + 1)
-                        oponent_values.append(best_value)
-                    values.append(np.min(oponent_values))
+                    final_nodes.append(node)
                 for action in player_actions:
                     new_nodes.append(node.new_node(action))
-            nodes = sorted(new_nodes, key=lambda node: self._evaluator.value(node.engine))[:self._beam_width]
-        values += [self._evaluator.value(node.engine) for node in nodes]
-        return max(values)
+            nodes = sorted(new_nodes, key=lambda node: node.value)
+            nodes = nodes[:self._beam_width]
+        nodes = sorted(final_nodes, key=lambda node: -self._evaluator.value(node.engine))
+        return nodes
 
     def get_action(self, engine):
-        node = BeamSearchStrategy.Node(engine)
-        ret = []
+        nodes = []
+        print(engine)
         for action in engine.get_player_actions():
-            max_value = self._search_best(node.new_node(action), 0)
-            ret.append((action, max_value))
-        if ret:
-            index = np.argmax([r[1] for r in ret])
-            return ret[index][0].action
+            node = BeamSearchStrategy.Node(engine, [action], self._evaluator)
+            nodes.append(node)
+        nodes = self._search(nodes, 0)
+        if nodes:
+            return nodes[0].get_initial_action()
 
 
 class DQNModelStrategy(Strategy):
@@ -163,6 +161,6 @@ class DQNModelStrategy(Strategy):
 if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
-    strategy = BeamSearchStrategy(2, 30)
+    strategy = BeamSearchStrategy(30, 50)
     strategy.run()
     # print(strategy.ave_score(n_sim=100))

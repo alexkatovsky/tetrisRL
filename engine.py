@@ -74,6 +74,9 @@ class TetrisEngine:
         def __init__(self, action):
             self.action = action
 
+        def __repr__(self):
+            return repr(self.action)
+
     class OponentAction:
         def __init__(self, piece):
             self.piece = piece
@@ -88,10 +91,10 @@ class TetrisEngine:
             0: left,
             1: right,
             # 2: hard_drop,
-            2: soft_drop,
-            3: rotate_left,
-            4: rotate_right,
-            5: idle,
+            # 2: soft_drop,
+            2: rotate_left,
+            3: rotate_right,
+            4: idle,
         } if copy is None else copy.value_action_map
         self.action_value_map = dict([(j, i) for i, j in self.value_action_map.items()]) if copy is None else copy.action_value_map
         self.nb_actions = len(self.value_action_map)
@@ -228,9 +231,12 @@ class TetrisEngine:
                 self.board[int(self.anchor[0] + i), int(self.anchor[1] + j)] = on
 
     def __repr__(self):
-        self._set_piece(True)
+        has_dropped = self._has_dropped()
+        if not has_dropped:
+            self._set_piece(True)
         s = 'o' + '-' * self.width + 'o\n'
         s += '\n'.join(['|' + ''.join(['X' if j else ' ' for j in i]) + '|' for i in self.board.T])
         s += '\no' + '-' * self.width + 'o'
-        self._set_piece(False)
+        if not has_dropped:
+            self._set_piece(False)
         return s
