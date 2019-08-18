@@ -29,7 +29,7 @@ class Strategy:
                 if not simulation:
                     print(engine)
                     print(action)
-                    # time.sleep(.05)
+                    time.sleep(.05)
             if done:
                 if not simulation:
                     print('score {0}'.format(score))
@@ -52,10 +52,22 @@ class Evaluator:
     def __init__(self):
         self._array = None
 
+    def _calc_n_enclosed_squares(self, board):
+        n_empty_from_top = 0
+        for col in range(board.shape[1]):
+            res = np.where(board[:, col] == 1)
+            if res[0].size == 0:
+                n_empty_from_top += board.shape[0]
+            else:
+                n_empty_from_top += res[0][0]
+        n_filled = np.where(board == 1)[0].size
+        return board.size - n_filled - n_empty_from_top
+
     def value(self, engine):
         if self._array is None:
             self._array = np.array([(engine.board.shape[1] - x - 1) ** 2 for x in range(engine.board.shape[1])])
-        return -engine.board.sum(axis=0).dot(self._array) - 999999 * engine.n_deaths
+        n_enclosed_squares = self._calc_n_enclosed_squares(engine.board.T)
+        return -engine.board.sum(axis=0).dot(self._array) - 999999 * engine.n_deaths - 200 * n_enclosed_squares
 
 
 class MCStrategy(Strategy):
@@ -126,7 +138,8 @@ class BeamSearchStrategy(Strategy):
             random.shuffle(new_nodes)
             # nodes = sorted(new_nodes, key=lambda node: node.value)
             nodes = new_nodes[:self._beam_width]
-        nodes = sorted(final_nodes, key=lambda node: -self._evaluator.value(node.engine))
+        final_nodes = dict({tuple(node.engine.board.reshape(-1)): node for node in final_nodes})
+        nodes = sorted(final_nodes.values(), key=lambda node: -self._evaluator.value(node.engine))
         return nodes
 
     def get_action(self, engine):
@@ -167,6 +180,6 @@ class DQNModelStrategy(Strategy):
 if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
-    strategy = BeamSearchStrategy(100, 2000)
+    strategy = BeamSearchStrategy(200, 2000)
     strategy.run()
     # print(strategy.ave_score(n_sim=100))
