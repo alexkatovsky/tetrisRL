@@ -70,45 +70,77 @@ def idle(shape, anchor, board):
 
 
 class TetrisEngine:
-    def __init__(self, width, height):
+    class PlayerAction:
+        def __init__(self, action):
+            self.action = action
+
+    class OponentAction:
+        def __init__(self, piece):
+            self.piece = piece
+
+    def __init__(self, width, height, copy=None):
         self.width = width
         self.height = height
-        self.board = np.zeros(shape=(width, height), dtype=np.float)
+        self.board = np.zeros(shape=(width, height), dtype=np.float) if copy is None else np.copy(copy.board)
 
         # actions are triggered by letters
         self.value_action_map = {
             0: left,
             1: right,
-            2: hard_drop,
-            3: soft_drop,
-            4: rotate_left,
-            5: rotate_right,
-            6: idle,
-        }
-        self.action_value_map = dict([(j, i) for i, j in self.value_action_map.items()])
+            # 2: hard_drop,
+            2: soft_drop,
+            3: rotate_left,
+            4: rotate_right,
+            5: idle,
+        } if copy is None else copy.value_action_map
+        self.action_value_map = dict([(j, i) for i, j in self.value_action_map.items()]) if copy is None else copy.action_value_map
         self.nb_actions = len(self.value_action_map)
 
         # for running the engine
-        self.time = -1
-        self.score = -1
-        self.anchor = None
-        self.shape = None
-        self.n_deaths = 0
+        self.time = -1 if copy is None else copy.time
+        self.score = -1 if copy is None else copy.score
+        self.anchor = None if copy is None else copy.anchor
+        self.shape = None if copy is None else copy.shape
+        self.n_deaths = 0 if copy is None else copy.n_deaths
 
         # used for generating shapes
-        self._shape_counts = [0] * len(shapes)
+        self._shape_counts = [0] * len(shapes) if copy is None else copy._shape_counts
 
         # clear after initializing
-        self.clear()
+        if copy is None:
+            self.clear()
 
     def copy(self):
-        engine = TetrisEngine(self.width, self.height)
-        engine.board = np.copy(self.board)
-        engine.time = self.time
-        engine.score = self.score
-        engine.shape = self.shape
-        engine.n_deaths = self.n_deaths
+        engine = TetrisEngine(self.width, self.height, copy=self)
         return engine
+
+    def get_player_actions(self):
+        if not self._has_dropped():
+            player_actions_keys = list(self.value_action_map.keys())
+            return [TetrisEngine.PlayerAction(v) for v in player_actions_keys]
+        else:
+            return []
+
+    def get_oponent_actions(self):
+        if self._has_dropped():
+            return [TetrisEngine.OponentAction(v) for v in shape_names]
+        else:
+            return []
+
+    def execute_action(self, action):
+        if isinstance(action, TetrisEngine.PlayerAction):
+            self.anchor = (int(self.anchor[0]), int(self.anchor[1]))
+            self.shape, self.anchor = self.value_action_map[action.action](self.shape, self.anchor, self.board)
+            self.shape, self.anchor = soft_drop(self.shape, self.anchor, self.board)
+            self.time += 1
+        elif isinstance(action, TetrisEngine.OponentAction):
+            self.anchor = (int(self.width / 2), 0)
+            self.shape = shapes[action.piece]
+        if self._has_dropped():
+            self._set_piece(True)
+            if np.any(self.board[:, 0]):
+                self.clear()
+                self.n_deaths += 1
 
     def _choose_shape(self):
         maxm = max(self._shape_counts)
@@ -123,7 +155,7 @@ class TetrisEngine:
     def _new_piece(self):
         # Place randomly on x-axis with 2 tiles padding
         #x = int((self.width/2+1) * np.random.rand(1,1)[0,0]) + 2
-        self.anchor = (self.width / 2, 0)
+        self.anchor = (int(self.width / 2), 0)
         #self.anchor = (x, 0)
         self.shape = self._choose_shape()
 
