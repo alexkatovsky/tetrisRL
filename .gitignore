@@ -1,0 +1,4 @@
+__pycache__/
+checkpoint.pth.tar
+log.out
+model_best.pth.tar

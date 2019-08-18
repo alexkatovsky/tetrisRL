@@ -111,6 +111,7 @@ class BeamSearchStrategy(Strategy):
         self._beam_width = beam_width
         self._depth = depth
         self._evaluator = Evaluator() if evaluator is None else evaluator
+        self._actions = []
 
     def _search(self, nodes, start_depth):
         final_nodes = []
@@ -122,20 +123,25 @@ class BeamSearchStrategy(Strategy):
                     final_nodes.append(node)
                 for action in player_actions:
                     new_nodes.append(node.new_node(action))
-            nodes = sorted(new_nodes, key=lambda node: node.value)
-            nodes = nodes[:self._beam_width]
+            random.shuffle(new_nodes)
+            # nodes = sorted(new_nodes, key=lambda node: node.value)
+            nodes = new_nodes[:self._beam_width]
         nodes = sorted(final_nodes, key=lambda node: -self._evaluator.value(node.engine))
         return nodes
 
     def get_action(self, engine):
-        nodes = []
-        print(engine)
-        for action in engine.get_player_actions():
-            node = BeamSearchStrategy.Node(engine, [action], self._evaluator)
-            nodes.append(node)
-        nodes = self._search(nodes, 0)
-        if nodes:
-            return nodes[0].get_initial_action()
+        if not self._actions:
+            nodes = []
+            for action in engine.get_player_actions():
+                node = BeamSearchStrategy.Node(engine, [action], self._evaluator)
+                nodes.append(node)
+            nodes = self._search(nodes, 0)
+            if nodes:
+                self._actions = nodes[0].actions
+        if self._actions:
+            action = self._actions[0]
+            self._actions = self._actions[1:]
+            return action.action
 
 
 class DQNModelStrategy(Strategy):
@@ -161,6 +167,6 @@ class DQNModelStrategy(Strategy):
 if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
-    strategy = BeamSearchStrategy(30, 50)
+    strategy = BeamSearchStrategy(100, 2000)
     strategy.run()
     # print(strategy.ave_score(n_sim=100))
