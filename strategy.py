@@ -7,6 +7,7 @@ from torch.autograd import Variable
 import torch
 import pickle
 from dqn_agent import DQN, ReplayMemory, Transition
+import itertools
 
 
 use_cuda = torch.cuda.is_available()
@@ -63,11 +64,24 @@ class Evaluator:
         n_filled = np.where(board == 1)[0].size
         return board.size - n_filled - n_empty_from_top
 
+    def _get_num_squares_enclosed(self, board):
+        n_enclosed = 0
+        for row in reversed(range(board.shape[0])):
+            if not np.any(board[row, :] == 1):
+                break
+            for col in range(board.shape[1]):
+                if board[row, col] == 0:
+                    if col + 1 == board.shape[1] or board[row, col + 1] == 1:
+                        if col == 0 or board[row, col - 1] == 1:
+                            n_enclosed += 1
+        return n_enclosed
+
     def value(self, engine):
         if self._array is None:
             self._array = np.array([(engine.board.shape[1] - x - 1) ** 2 for x in range(engine.board.shape[1])])
         n_enclosed_squares = self._calc_n_enclosed_squares(engine.board.T)
-        return -engine.board.sum(axis=0).dot(self._array) - 999999 * engine.n_deaths - 200 * n_enclosed_squares
+        n_enclosed = self._get_num_squares_enclosed(engine.board.T)
+        return -engine.board.sum(axis=0).dot(self._array) - 999999 * engine.n_deaths - 100 * n_enclosed_squares - 10 * n_enclosed
 
 
 class MCStrategy(Strategy):
