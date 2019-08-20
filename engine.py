@@ -117,6 +117,31 @@ class TetrisEngine:
         engine = TetrisEngine(self.width, self.height, copy=self)
         return engine
 
+    def get_board_with_shape(self):
+        has_dropped = self._has_dropped()
+        if not has_dropped:
+            self._set_piece(True)
+        board = np.copy(self.board)
+        if not has_dropped:
+            self._set_piece(False)
+        return board
+
+    def lowest_row_of_piece(self):
+        return np.max([self.anchor[1] + x[1] for x in self.shape])
+
+    def execute_idle_action(self):
+        action = TetrisEngine.PlayerAction(4)
+        self.execute_action(action)
+        return action
+
+    def get_lowest_row_number_with_filled_square(self):
+        ones = np.where(self.board.T == 1)[0]
+        if ones.size > 0:
+            v = np.min(ones)
+            return v
+        else:
+            return self.board.shape[1]
+
     def get_player_actions(self):
         if not self._has_dropped():
             player_actions_keys = list(self.value_action_map.keys())

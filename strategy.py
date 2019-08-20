@@ -30,7 +30,7 @@ class Strategy:
                 if not simulation:
                     print(engine)
                     print(action)
-                    time.sleep(.05)
+                    time.sleep(.005)
             if done:
                 if not simulation:
                     print('score {0}'.format(score))
@@ -142,6 +142,8 @@ class BeamSearchStrategy(Strategy):
     def _search(self, nodes, start_depth):
         final_nodes = []
         for depth in range(start_depth, self._depth):
+            if not nodes:
+                break
             new_nodes = []
             for node in nodes:
                 player_actions, oponent_actions = node.get_possible_actions_at_next_step()
@@ -149,22 +151,34 @@ class BeamSearchStrategy(Strategy):
                     final_nodes.append(node)
                 for action in player_actions:
                     new_nodes.append(node.new_node(action))
-            random.shuffle(new_nodes)
             # nodes = sorted(new_nodes, key=lambda node: node.value)
-            nodes = new_nodes[:self._beam_width]
+            nodes = new_nodes
+            nodes = dict({tuple(node.engine.get_board_with_shape().reshape(-1)): node for node in nodes})
+            nodes = list(nodes.values())
+            random.shuffle(nodes)
+            nodes = nodes[:self._beam_width]
         final_nodes = dict({tuple(node.engine.board.reshape(-1)): node for node in final_nodes})
         nodes = sorted(final_nodes.values(), key=lambda node: -self._evaluator.value(node.engine))
         return nodes
 
+    def _drop_down(self, engine):
+        n_row = engine.get_lowest_row_number_with_filled_square()
+        drop_actions = []
+        while engine.lowest_row_of_piece() + 8 < n_row:
+            action = engine.execute_idle_action()  # idle -- drop down
+            drop_actions.append(action)
+        return drop_actions
+
     def get_action(self, engine):
         if not self._actions:
+            drop_actions = self._drop_down(engine)
             nodes = []
             for action in engine.get_player_actions():
                 node = BeamSearchStrategy.Node(engine, [action], self._evaluator)
                 nodes.append(node)
             nodes = self._search(nodes, 0)
             if nodes:
-                self._actions = nodes[0].actions
+                self._actions = drop_actions + nodes[0].actions
         if self._actions:
             action = self._actions[0]
             self._actions = self._actions[1:]
@@ -194,6 +208,6 @@ class DQNModelStrategy(Strategy):
 if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
-    strategy = BeamSearchStrategy(200, 2000)
+    strategy = BeamSearchStrategy(500, 2000)
     strategy.run()
     # print(strategy.ave_score(n_sim=100))
