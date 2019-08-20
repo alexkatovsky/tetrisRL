@@ -30,7 +30,7 @@ class Strategy:
                 if not simulation:
                     print(engine)
                     print(action)
-                    time.sleep(.005)
+                    # time.sleep(.005)
             if done:
                 if not simulation:
                     print('score {0}'.format(score))
@@ -115,18 +115,16 @@ class MCStrategy(Strategy):
 
 class BeamSearchStrategy(Strategy):
     class Node:
-        def __init__(self, engine, prev_actions, evaluator):
+        def __init__(self, engine, prev_actions):
             self.engine = engine.copy()
             self.engine.execute_action(prev_actions[-1])
             self.actions = prev_actions
-            self.evaluator = evaluator
-            self.value = -evaluator.value(self.engine)
 
         def get_initial_action(self):
             return self.actions[0].action
 
         def new_node(self, action):
-            return BeamSearchStrategy.Node(self.engine, self.actions + [action], self.evaluator)
+            return BeamSearchStrategy.Node(self.engine, self.actions + [action])
 
         def get_possible_actions_at_next_step(self):
             player_actions = self.engine.get_player_actions()
@@ -151,7 +149,6 @@ class BeamSearchStrategy(Strategy):
                     final_nodes.append(node)
                 for action in player_actions:
                     new_nodes.append(node.new_node(action))
-            # nodes = sorted(new_nodes, key=lambda node: node.value)
             nodes = new_nodes
             nodes = dict({tuple(node.engine.get_board_with_shape().reshape(-1)): node for node in nodes})
             nodes = list(nodes.values())
@@ -174,7 +171,7 @@ class BeamSearchStrategy(Strategy):
             drop_actions = self._drop_down(engine)
             nodes = []
             for action in engine.get_player_actions():
-                node = BeamSearchStrategy.Node(engine, [action], self._evaluator)
+                node = BeamSearchStrategy.Node(engine, [action])
                 nodes.append(node)
             nodes = self._search(nodes, 0)
             if nodes:
