@@ -117,7 +117,7 @@ class BeamSearchStrategy(Strategy):
     class Node:
         def __init__(self, engine, prev_actions):
             self.engine = engine.copy()
-            self.engine.execute_action(prev_actions[-1])
+            self.died = self.engine.execute_action(prev_actions[-1])
             self.actions = prev_actions
 
         def get_initial_action(self):
@@ -148,7 +148,9 @@ class BeamSearchStrategy(Strategy):
                 if oponent_actions:
                     final_nodes.append(node)
                 for action in player_actions:
-                    new_nodes.append(node.new_node(action))
+                    new_node = node.new_node(action)
+                    if not new_node.died:
+                        new_nodes.append(new_node)
             nodes = new_nodes
             nodes = dict({tuple(node.engine.get_board_with_shape().reshape(-1)): node for node in nodes})
             nodes = list(nodes.values())
@@ -172,7 +174,8 @@ class BeamSearchStrategy(Strategy):
             nodes = []
             for action in engine.get_player_actions():
                 node = BeamSearchStrategy.Node(engine, [action])
-                nodes.append(node)
+                if not node.died:
+                    nodes.append(node)
             nodes = self._search(nodes, 0)
             if nodes:
                 self._actions = drop_actions + nodes[0].actions

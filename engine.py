@@ -156,6 +156,7 @@ class TetrisEngine:
             return []
 
     def execute_action(self, action):
+        died = False
         if isinstance(action, TetrisEngine.PlayerAction):
             self.anchor = (int(self.anchor[0]), int(self.anchor[1]))
             self.shape, self.anchor = self.value_action_map[action.action](self.shape, self.anchor, self.board)
@@ -167,8 +168,10 @@ class TetrisEngine:
         if self._has_dropped():
             self._set_piece(True)
             if np.any(self.board[:, 0]):
+                died = True
                 self.clear()
                 self.n_deaths += 1
+        return died
 
     def _choose_shape(self):
         maxm = max(self._shape_counts)
