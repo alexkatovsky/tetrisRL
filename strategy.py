@@ -131,15 +131,14 @@ class BeamSearchStrategy(Strategy):
             oponent_actions = self.engine.get_oponent_actions()
             return player_actions, oponent_actions
 
-    def __init__(self, beam_width=5, depth=20, evaluator=None):
+    def __init__(self, beam_width=500, evaluator=None):
         self._beam_width = beam_width
-        self._depth = depth
         self._evaluator = Evaluator() if evaluator is None else evaluator
         self._actions = []
 
-    def _search(self, nodes, start_depth):
+    def _search(self, nodes):
         final_nodes = []
-        for depth in range(start_depth, self._depth):
+        while True:
             if not nodes:
                 break
             new_nodes = []
@@ -163,7 +162,7 @@ class BeamSearchStrategy(Strategy):
     def _drop_down(self, engine):
         n_row = engine.get_lowest_row_number_with_filled_square()
         drop_actions = []
-        while engine.lowest_row_of_piece() + 8 < n_row:
+        while engine.lowest_row_of_piece() + 7 < n_row:
             action = engine.execute_idle_action()  # idle -- drop down
             drop_actions.append(action)
         return drop_actions
@@ -176,7 +175,7 @@ class BeamSearchStrategy(Strategy):
                 node = BeamSearchStrategy.Node(engine, [action])
                 if not node.died:
                     nodes.append(node)
-            nodes = self._search(nodes, 0)
+            nodes = self._search(nodes)
             if nodes:
                 self._actions = drop_actions + nodes[0].actions
         if self._actions:
@@ -208,6 +207,6 @@ class DQNModelStrategy(Strategy):
 if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
-    strategy = BeamSearchStrategy(500, 2000)
+    strategy = BeamSearchStrategy()
     strategy.run()
     # print(strategy.ave_score(n_sim=100))
