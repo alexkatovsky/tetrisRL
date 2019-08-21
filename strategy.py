@@ -162,7 +162,7 @@ class BeamSearchStrategy(Strategy):
     def _drop_down(self, engine):
         n_row = engine.get_lowest_row_number_with_filled_square()
         drop_actions = []
-        while engine.lowest_row_of_piece() + 7 < n_row:
+        while engine.lowest_row_of_piece() + 8 < n_row:
             action = engine.execute_idle_action()  # idle -- drop down
             drop_actions.append(action)
         return drop_actions
