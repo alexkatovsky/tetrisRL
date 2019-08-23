@@ -38,7 +38,11 @@ class Strategy:
         return score
 
     def ave_score(self, width=10, height=20, n_sim=10000):
-        scores = [self.run(simulation=True) for _ in range(n_sim)]
+        scores = []
+        for i in range(n_sim):
+            score = self.run(simulation=True)
+            scores.append(score)
+            print(f'{i}: {score} ({np.mean(scores)})')
         return np.mean(scores)
 
 
@@ -208,5 +212,5 @@ if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
     strategy = BeamSearchStrategy()
-    strategy.run()
-    # print(strategy.ave_score(n_sim=100))
+    # strategy.run()
+    print(strategy.ave_score(n_sim=100))
