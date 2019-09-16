@@ -115,11 +115,11 @@ class DQN(nn.Module):
 #    controls the rate of the decay.
 #
 
-BATCH_SIZE = 64
-GAMMA = 0.999
+BATCH_SIZE = 500
+GAMMA = 0.99
 EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 200
+EPS_END = 0.5
+EPS_DECAY = 10000
 CHECKPOINT_FILE = 'checkpoint.pth.tar'
 
 
@@ -132,8 +132,8 @@ if use_cuda:
     model.cuda()
 
 loss = nn.MSELoss()
-optimizer = optim.RMSprop(model.parameters(), lr=.001)
-memory = ReplayMemory(3000)
+optimizer = optim.RMSprop(model.parameters(), lr=.01)
+memory = ReplayMemory(5000)
 
 
 def select_action(state):
@@ -230,6 +230,7 @@ def optimize_model():
 
     # Compute Huber loss
     loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+    import pdb; pdb.set_trace()
 
     # Optimize the model
     optimizer.zero_grad()
@@ -288,6 +289,7 @@ if __name__ == '__main__':
     # fails), we restart the loop.
 
     f = open('log.out', 'w+')
+    scores = []
     for i_episode in count(start_epoch):
         # Initialize the environment and state
         state = FloatTensor(engine.clear()[None,None,:,:])
@@ -307,13 +309,17 @@ if __name__ == '__main__':
 
             reward = FloatTensor([float(reward)])
             # Store the transition in memory
-            memory.push(last_state, action, state, reward)
+            if done:
+                scores.append(score)
+                memory.push(last_state, action, state, FloatTensor([float(-1000.0)]))
+            else:
+                memory.push(last_state, action, state, FloatTensor([float(0.5)]))
 
             # Perform one step of the optimization (on the target network)
             if done:
                 # Train model
                 if i_episode % 10 == 0:
-                    log = 'epoch {0} score {1}'.format(i_episode, score)
+                    log = 'epoch {0} score {1}'.format(i_episode, np.mean(scores[-100:]))
                     print(log)
                     f.write(log + '\n')
                     f.flush()

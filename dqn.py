@@ -1,7 +1,10 @@
 from engine import TetrisEngine
 import random
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
+import numpy as np
 
 
 class TetrisGame:
@@ -32,7 +35,6 @@ class TetrisGame:
 
     def __init__(self, width=10, height=20):
         self._engine = TetrisEngine(width, height)
-        self._engine.clear()
         self._at_start = True
 
     def _search(self, nodes):
@@ -42,21 +44,23 @@ class TetrisGame:
                 break
             new_nodes = []
             for node in nodes:
-                player_actions, oponent_actions = node.get_possible_actions_at_next_step()
-                if oponent_actions:
+                if node.died:
                     final_nodes.append(node)
-                for action in player_actions:
-                    new_node = node.new_node(action)
-                    if not new_node.died:
-                        new_nodes.append(new_node)
+                else:
+                    player_actions, oponent_actions = node.get_possible_actions_at_next_step()
+                    if oponent_actions:
+                        final_nodes.append(node)
+                    for action in player_actions:
+                        new_node = node.new_node(action)
+                        if new_node.died:
+                            final_nodes.append(new_node)
+                        else:
+                            new_nodes.append(new_node)
             nodes = new_nodes
             nodes = dict({tuple(node.engine.get_board_with_shape().reshape(-1)): node for node in nodes})
             nodes = list(nodes.values())
-            random.shuffle(nodes)
-            nodes = nodes[:self._beam_width]
         final_nodes = dict({tuple(node.engine.board.reshape(-1)): node for node in final_nodes})
-        nodes = sorted(final_nodes.values(), key=lambda node: -self._evaluator.value(node.engine))
-        return nodes
+        return list(final_nodes.values())
 
     def _drop_down(self, engine):
         n_row = engine.get_lowest_row_number_with_filled_square()
@@ -72,16 +76,28 @@ class TetrisGame:
         nodes = []
         for action in engine.get_player_actions():
             node = TetrisGame.Node(engine, [action])
-            if not node.died:
-                nodes.append(node)
+            nodes.append(node)
         nodes = self._search(nodes)
         actions = [TetrisGame.Action(drop_actions + node.actions, node) for node in nodes]
         return actions
 
+    def end_game_on_no_actions(self):
+        self._at_start = True
+        reward = -9999.0
+        self._engine.clear()
+        return reward
+
     def execute_action(self, action):
-        self._at_start = action._node.died
         self._engine = action._node.engine
-        reward = -1 if action._node.died else 0
+        if action._node.died:
+            died = True
+            self._engine.clear()
+        else:
+            player_actions, oponent_actions = action._node.get_possible_actions_at_next_step()
+            assert(player_actions == [])
+            died = self._engine.execute_action(random.sample(oponent_actions, 1)[0])
+        self._at_start = died
+        reward = -9999.0 if died else 0.5
         return reward
 
     def at_start(self):
@@ -93,7 +109,7 @@ class TetrisGame:
 
 class DQNetwork(nn.Module):
     def __init__(self):
-        super(DQN, self).__init__()
+        super(DQNetwork, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1)
         self.bn1 = nn.BatchNorm2d(16)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
@@ -127,41 +143,63 @@ class Memory(object):
         self.position = (self.position + 1) % self.capacity
 
     def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+        return random.sample(self.memory, min(batch_size, len(self.memory)))
 
 
 class DQN:
-    def __init__(self, buffer_size=100, gamma=0.99, epsilom=0.9):
+    def __init__(self, model_file_path, buffer_size=100, gamma=0.99, epsilon=0.5, batch_size=1):
         self._buffer_size = buffer_size
         self._gamma = gamma
-        self._epsilon = epsilom
+        self._epsilon = epsilon
+        self._batch_size = batch_size
+
+    def _q(self, action):
+        board = action.get_resulting_board()
+        state = torch.FloatTensor(board[None, None, :, :])
+        value = self._network(state)
+        return value[0][0]
 
     def select_action(self, actions):
-        if random.random() < self._epsilom:
-            index = random.randint(0, len(actions))
+        if random.random() < self._epsilon:
+            print("choose random")
+            index = random.randint(0, len(actions) - 1)
         else:
-            ratings = [(index, self._network(action.get_resulting_board())) for index, action in enumerate(actions)]
+            print("choose Q")
+            ratings = [(index, self._q(action)) for index, action in enumerate(actions)]
             ratings.sort(key=lambda x: x[1])
             index = ratings[0][0]
         return actions[index]
 
     def _train_on_minibatch(self):
-        pass
+        transitions = self._memory.sample(self._batch_size)
+        for transition in transitions:
+            target_value = torch.Tensor([transition.reward])
+            if transition.possible_actions:
+                max_q_value = max([self._q(action) for action in transition.possible_actions])
+                target_value = target_value + self._gamma * max_q_value
+            q_value = self._q(transition.action)
+            loss = F.smooth_l1_loss(q_value, target_value)
+            self._optimizer.zero_grad()
+            loss.backward()
+            self._optimizer.step()
 
     def train(self):
         self._memory = Memory(self._buffer_size)
         self._network = DQNetwork()
+        self._optimizer = optim.RMSprop(self._network.parameters(), lr=.01)
         self._game = TetrisGame()
         epoch = 0
         while True:
             n_moves = self._game.get_number_of_moves()
             epoch += 1
-            actions = self._game.get_actions()
-            action = self._select_action(actions)
+            possible_actions = self._game.get_actions()
+            action = self.select_action(possible_actions)
             reward = self._game.execute_action(action)
+            print(self._game._engine)
             if self._game.at_start():
                 print(n_moves)
-            self._save(action, actions, reward)
+            print(reward)
+            self._memory.push(action, possible_actions, reward)
             self._train_on_minibatch()
 
 
