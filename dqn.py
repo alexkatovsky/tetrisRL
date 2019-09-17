@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import numpy as np
+import math
 
 
 class TetrisGame:
@@ -147,11 +147,14 @@ class Memory(object):
 
 
 class DQN:
-    def __init__(self, model_file_path, buffer_size=100, gamma=0.99, epsilon=0.5, batch_size=1):
+    def __init__(self, model_file_path, buffer_size=500, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=200, batch_size=20):
         self._buffer_size = buffer_size
         self._gamma = gamma
-        self._epsilon = epsilon
+        self._epsilon_start = epsilon_start
+        self._epsilon_end = epsilon_end
+        self._epsilon_decay = epsilon_decay
         self._batch_size = batch_size
+        self._model_file_path = model_file_path
 
     def _q(self, action):
         board = action.get_resulting_board()
@@ -159,12 +162,15 @@ class DQN:
         value = self._network(state)
         return value[0][0]
 
+    def _epsilon_threshold(self):
+        threshold = self._epsilon_end + (self._epsilon_start - self._epsilon_end) * math.exp(-1. * self._n_games / self._epsilon_decay)
+        print(threshold)
+        return threshold
+
     def select_action(self, actions):
-        if random.random() < self._epsilon:
-            print("choose random")
+        if random.random() < self._epsilon_threshold():
             index = random.randint(0, len(actions) - 1)
         else:
-            print("choose Q")
             ratings = [(index, self._q(action)) for index, action in enumerate(actions)]
             ratings.sort(key=lambda x: x[1])
             index = ratings[0][0]
@@ -172,18 +178,22 @@ class DQN:
 
     def _train_on_minibatch(self):
         transitions = self._memory.sample(self._batch_size)
+        target_values = []
+        q_values = []
         for transition in transitions:
             target_value = torch.Tensor([transition.reward])
             if transition.possible_actions:
                 max_q_value = max([self._q(action) for action in transition.possible_actions])
                 target_value = target_value + self._gamma * max_q_value
-            q_value = self._q(transition.action)
-            loss = F.smooth_l1_loss(q_value, target_value)
-            self._optimizer.zero_grad()
-            loss.backward()
-            self._optimizer.step()
+            target_values.append(target_value.reshape(-1))
+            q_values.append(self._q(transition.action).reshape(-1))
+        loss = F.smooth_l1_loss(torch.cat(q_values), torch.cat(target_values))
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
 
     def train(self):
+        self._n_games = 0
         self._memory = Memory(self._buffer_size)
         self._network = DQNetwork()
         self._optimizer = optim.RMSprop(self._network.parameters(), lr=.01)
@@ -197,6 +207,7 @@ class DQN:
             reward = self._game.execute_action(action)
             print(self._game._engine)
             if self._game.at_start():
+                self._n_games += 1
                 print(n_moves)
             print(reward)
             self._memory.push(action, possible_actions, reward)
