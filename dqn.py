@@ -147,7 +147,7 @@ class Memory(object):
 
 
 class DQN:
-    def __init__(self, model_file_path, buffer_size=500, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=200, batch_size=20):
+    def __init__(self, model_file_path, buffer_size=500, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=200, batch_size=50):
         self._buffer_size = buffer_size
         self._gamma = gamma
         self._epsilon_start = epsilon_start
@@ -178,16 +178,33 @@ class DQN:
 
     def _train_on_minibatch(self):
         transitions = self._memory.sample(self._batch_size)
-        target_values = []
-        q_values = []
+        # target_values = []
+        # q_values = []
+        # for transition in transitions:
+        #     target_value = torch.Tensor([transition.reward])
+        #     if transition.possible_actions:
+        #         max_q_value = max([self._q(action) for action in transition.possible_actions])
+        #         target_value = target_value + self._gamma * max_q_value
+        #     target_values.append(target_value.reshape(-1))
+        #     q_values.append(self._q(transition.action).reshape(-1))
+        # loss = F.smooth_l1_loss(torch.cat(q_values), torch.cat(target_values))
+        non_final_mask = torch.ByteTensor(tuple(map(lambda t: bool(t.possible_actions), transitions)))
+        states = []
+        non_final_states = []
         for transition in transitions:
-            target_value = torch.Tensor([transition.reward])
+            board = transition.action.get_resulting_board()
+            state = torch.FloatTensor(board[None, None, :, :])
             if transition.possible_actions:
-                max_q_value = max([self._q(action) for action in transition.possible_actions])
-                target_value = target_value + self._gamma * max_q_value
-            target_values.append(target_value.reshape(-1))
-            q_values.append(self._q(transition.action).reshape(-1))
-        loss = F.smooth_l1_loss(torch.cat(q_values), torch.cat(target_values))
+                non_final_states.append(state)
+            states.append(state)
+        with torch.no_grad():
+            non_final_next_states = torch.autograd.Variable(torch.cat(non_final_states), volatile=True)
+            max_q_values = torch.autograd.Variable(torch.zeros(len(transitions)).type(torch.FloatTensor))
+            max_q_values[non_final_mask] = self._network(non_final_next_states).max()
+            rewards = torch.autograd.Variable(torch.cat([torch.FloatTensor([t.reward]) for t in transitions]))
+            target_valuess = (max_q_values * self._gamma) + rewards
+        q_values = self._network(torch.autograd.Variable(torch.cat(states)))
+        loss = F.smooth_l1_loss(q_values, target_valuess)
         self._optimizer.zero_grad()
         loss.backward()
         self._optimizer.step()
