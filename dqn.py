@@ -184,7 +184,7 @@ class Memory(object):
 
 
 class DQN:
-    def __init__(self, model_file_path='dqn_model.pickle', buffer_size=1000, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=500, batch_size=64):
+    def __init__(self, model_file_path='dqn_model.pickle', buffer_size=1000, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=500, batch_size=64, C=100):
         self._model_file_path = model_file_path
         self._buffer_size = buffer_size
         self._gamma = gamma
@@ -192,6 +192,7 @@ class DQN:
         self._epsilon_end = epsilon_end
         self._epsilon_decay = epsilon_decay
         self._batch_size = batch_size
+        self._C = C
 
     def _get_state(self, board):
         return self._network.get_state(board)
@@ -254,6 +255,7 @@ class DQN:
         #     target_values.append(target_value.reshape(-1))
         #     q_values.append(self.evaluate(transition.action).reshape(-1))
         # loss = F.smooth_l1_loss(torch.cat(q_values), torch.cat(target_values))
+        
         states = []
         for transition in transitions:
             board = transition.action.get_resulting_board()
@@ -264,7 +266,7 @@ class DQN:
             for transition in transitions:
                 if transition.possible_actions:
                     next_states = torch.cat([self._get_state(action.get_resulting_board()) for action in transition.possible_actions])
-                    q_values = self._network(next_states)
+                    q_values = self._eval_network(next_states)
                     max_q_values.append(q_values.max().reshape(-1))
                 else:
                     max_q_values.append(torch.FloatTensor([0]))
@@ -284,6 +286,9 @@ class DQN:
         self._optimizer = optim.RMSprop(self._network.get_parameters(), lr=.01)
         self._game = TetrisGame()
         epoch = 0
+        self._eval_network = self._create_network()
+        self._eval_network.load_state_dict(self._network.state_dict())
+
         while True:
             n_moves = self._game.get_number_of_moves()
             epoch += 1
@@ -299,6 +304,8 @@ class DQN:
             self._train_on_minibatch()
             if epoch % 100 == 0:
                 self._save_model()
+            if epoch % self._C == 0:
+                self._eval_network.load_state_dict(self._network.state_dict())
 
 
 class DQNConv(DQN):
@@ -318,5 +325,5 @@ class DQNLin(DQN):
 
 
 if __name__ == "__main__":
-    dqn = DQNLin(model_file_path='DQNFeedForwardNetwork.pkl')
+    dqn = DQNLin(model_file_path='DQNFeedForwardNetwork_holding.pkl')
     dqn.train()
