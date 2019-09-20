@@ -3,3 +3,7 @@ checkpoint.pth.tar
 log.out
 model_best.pth.tar
 dqn_model.pickle
+**.tar
+**.pickle
+**.pkl
+**.out
