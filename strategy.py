@@ -30,7 +30,7 @@ class Strategy:
                 if not simulation:
                     print(engine)
                     print(action)
-                    # time.sleep(.005)
+                    # time.sleep(.05)
             if done:
                 if not simulation:
                     print('score {0}'.format(score))
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
     # strategy = BeamSearchStrategy()
-    strategy = DQNStrategy()
+    strategy = DQNStrategy(model_file_path='DQNFeedForwardNetwork.pkl')
     # strategy = RandomStrategy(avoid_death=True)
-    strategy.run()
-    # print(strategy.ave_score(n_sim=100))
+    # strategy.run()
+    print(strategy.ave_score(n_sim=100))

@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import math
 import pickle
+import numpy as np
 
 
 class TetrisGame:
@@ -91,6 +92,9 @@ class TetrisGame:
         self._engine.clear()
         return reward
 
+    def _score(self):
+        return 1 / (1 - self._engine.get_lowest_row_number_with_filled_square() / self._engine.height) ** 2
+
     def execute_action(self, action):
         self._engine = action._node.engine
         if action._node.died:
@@ -101,7 +105,7 @@ class TetrisGame:
             assert(player_actions == [])
             died = self._engine.execute_action(random.sample(oponent_actions, 1)[0])
         self._at_start = died
-        reward = -9999.0 if died else 0.5
+        reward = -99.0 if died else self._score()
         return reward
 
     def at_start(self):
@@ -121,11 +125,40 @@ class DQNetwork(nn.Module):
         self.lin1 = nn.Linear(768, 256)
         self.head = nn.Linear(256, 1)
 
+    def get_parameters(self):
+        return self.parameters()
+
+    def get_state(self, board):
+        return torch.FloatTensor(board[None, None, :, :])
+
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.lin1(x.view(x.size(0), -1)))
         return self.head(x.view(x.size(0), -1))
+
+
+class DQNFeedForwardNetwork(nn.Module):
+    def __init__(self, dims):
+        super(DQNFeedForwardNetwork, self).__init__()
+        self._layers = []
+        for dim1, dim2 in zip(dims[:-1], dims[1:]):
+            self._layers.append(nn.Linear(dim1, dim2))
+
+    def get_parameters(self):
+        parameters = []
+        for fc in self._layers:
+            parameters += list(fc.parameters())
+        return parameters
+
+    def get_state(self, board):
+        return torch.FloatTensor(np.concatenate(board).reshape(1, -1))
+
+    def forward(self, x):
+        for layer in self._layers[:-1]:
+            x = F.relu(layer(x))
+        x = self._layers[-1](x)
+        return x
 
 
 class Memory(object):
@@ -151,7 +184,7 @@ class Memory(object):
 
 
 class DQN:
-    def __init__(self, model_file_path='dqn_model.pickle', buffer_size=10000, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=500, batch_size=100):
+    def __init__(self, model_file_path='dqn_model.pickle', buffer_size=1000, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=500, batch_size=64):
         self._model_file_path = model_file_path
         self._buffer_size = buffer_size
         self._gamma = gamma
@@ -160,9 +193,12 @@ class DQN:
         self._epsilon_decay = epsilon_decay
         self._batch_size = batch_size
 
+    def _get_state(self, board):
+        return self._network.get_state(board)
+
     def evaluate(self, action):
         board = action.get_resulting_board()
-        state = torch.FloatTensor(board[None, None, :, :])
+        state = self._get_state(board)
         value = self._network(state)
         return float(value[0][0])
 
@@ -182,9 +218,12 @@ class DQN:
                 if name == 'DQNetwork':
                     from dqn import DQNetwork
                     return DQNetwork
-                if name == 'DQN':
-                    from dqn import DQN
-                    return DQN
+                if name == 'DQNFeedForwardNetwork':
+                    from dqn import DQNFeedForwardNetwork
+                    return DQNFeedForwardNetwork
+                if name == 'DQNLin':
+                    from dqn import DQNLin
+                    return DQNLin
                 return super().find_class(module, name)
         pickle_data = CustomUnpickler(open(model_file_path, 'rb')).load()
         return pickle_data
@@ -218,13 +257,13 @@ class DQN:
         states = []
         for transition in transitions:
             board = transition.action.get_resulting_board()
-            state = torch.FloatTensor(board[None, None, :, :])
+            state = self._get_state(board)
             states.append(state)
         with torch.no_grad():
             max_q_values = []
             for transition in transitions:
                 if transition.possible_actions:
-                    next_states = torch.cat([torch.FloatTensor(action.get_resulting_board()[None, None, :, :]) for action in transition.possible_actions])
+                    next_states = torch.cat([self._get_state(action.get_resulting_board()) for action in transition.possible_actions])
                     q_values = self._network(next_states)
                     max_q_values.append(q_values.max().reshape(-1))
                 else:
@@ -241,8 +280,8 @@ class DQN:
     def train(self):
         self._n_games = 0
         self._memory = Memory(self._buffer_size)
-        self._network = DQNetwork()
-        self._optimizer = optim.RMSprop(self._network.parameters(), lr=.01)
+        self._network = self._create_network()
+        self._optimizer = optim.RMSprop(self._network.get_parameters(), lr=.01)
         self._game = TetrisGame()
         epoch = 0
         while True:
@@ -262,6 +301,22 @@ class DQN:
                 self._save_model()
 
 
+class DQNConv(DQN):
+    def __init__(self, *args, **kwargs):
+        DQN.__init__(self, *args, **kwargs)
+
+    def _create_network(self):
+        return DQNetwork()
+
+
+class DQNLin(DQN):
+    def __init__(self, *args, **kwargs):
+        DQN.__init__(self, *args, **kwargs)
+
+    def _create_network(self):
+        return DQNFeedForwardNetwork([200, 100, 20, 1])
+
+
 if __name__ == "__main__":
-    dqn = DQN()
+    dqn = DQNLin(model_file_path='DQNFeedForwardNetwork.pkl')
     dqn.train()
