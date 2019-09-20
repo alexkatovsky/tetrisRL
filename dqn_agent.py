@@ -230,7 +230,6 @@ def optimize_model():
 
     # Compute Huber loss
     loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
-    import pdb; pdb.set_trace()
 
     # Optimize the model
     optimizer.zero_grad()

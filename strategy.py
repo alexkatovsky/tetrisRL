@@ -2,11 +2,11 @@ from engine import TetrisEngine
 import time
 import random
 import numpy as np
-from dqn_agent import DQN
+import dqn_agent
 from torch.autograd import Variable
 import torch
 import pickle
-from dqn_agent import DQN, ReplayMemory, Transition
+import dqn
 import itertools
 
 
@@ -47,8 +47,18 @@ class Strategy:
 
 
 class RandomStrategy(Strategy):
+    def __init__(self, avoid_death=False):
+        self._avoid_death = avoid_death
+
     def get_action(self, engine):
         actions = list(engine.value_action_map.keys())
+        if self._avoid_death:
+            new_actions = []
+            for action in actions:
+                if not engine.copy().execute_action(action):
+                    new_actions.append(action)
+            if new_actions:
+                actions = new_actions
         index = random.randrange(len(actions))
         return actions[index]
 
@@ -193,9 +203,9 @@ class DQNModelStrategy(Strategy):
         class CustomUnpickler(pickle.Unpickler):
             def find_class(self, module, name):
                 if name == 'ReplayMemory':
-                    return ReplayMemory
+                    return dqn_agent.ReplayMemory
                 return super().find_class(module, name)
-        self._model = DQN()
+        self._model = dqn_agent.DQN()
         if use_cuda:
             self._model.cuda()
         pickle.Unpickler = CustomUnpickler
@@ -208,9 +218,29 @@ class DQNModelStrategy(Strategy):
         return int(action[0, 0])
 
 
+class DQNStrategy(Strategy):
+    def __init__(self, model_file_path="dqn_model.pickle"):
+        self._model = dqn.DQN.load_model(model_file_path)
+        self._actions = []
+
+    def get_action(self, engine):
+        if not self._actions:
+            actions = dqn.TetrisGame(engine=engine).get_actions()
+            q_values = sorted([(action, self._model.evaluate(action)) for action in actions], key=lambda x: x[1])
+            if q_values:
+                action = q_values[-1][0]
+                self._actions = action._actions
+        if self._actions:
+            action = self._actions[0]
+            self._actions = self._actions[1:]
+            return action.action
+
+
 if __name__ == "__main__":
     # strategy = DQNModelStrategy()
     # print(strategy.ave_score(n_sim=100))
-    strategy = BeamSearchStrategy()
-    # strategy.run()
-    print(strategy.ave_score(n_sim=100))
+    # strategy = BeamSearchStrategy()
+    strategy = DQNStrategy()
+    # strategy = RandomStrategy(avoid_death=True)
+    strategy.run()
+    # print(strategy.ave_score(n_sim=100))

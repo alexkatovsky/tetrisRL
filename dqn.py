@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import math
+import pickle
 
 
 class TetrisGame:
@@ -33,8 +34,11 @@ class TetrisGame:
             oponent_actions = self.engine.get_oponent_actions()
             return player_actions, oponent_actions
 
-    def __init__(self, width=10, height=20):
-        self._engine = TetrisEngine(width, height)
+    def __init__(self, width=10, height=20, engine=None):
+        if engine is None:
+            self._engine = TetrisEngine(width, height)
+        else:
+            self._engine = engine
         self._at_start = True
 
     def _search(self, nodes):
@@ -147,20 +151,43 @@ class Memory(object):
 
 
 class DQN:
-    def __init__(self, model_file_path, buffer_size=500, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=200, batch_size=50):
+    def __init__(self, model_file_path='dqn_model.pickle', buffer_size=10000, gamma=0.99, epsilon_start=0.9, epsilon_end=0.1, epsilon_decay=500, batch_size=100):
+        self._model_file_path = model_file_path
         self._buffer_size = buffer_size
         self._gamma = gamma
         self._epsilon_start = epsilon_start
         self._epsilon_end = epsilon_end
         self._epsilon_decay = epsilon_decay
         self._batch_size = batch_size
-        self._model_file_path = model_file_path
 
-    def _q(self, action):
+    def evaluate(self, action):
         board = action.get_resulting_board()
         state = torch.FloatTensor(board[None, None, :, :])
         value = self._network(state)
-        return value[0][0]
+        return float(value[0][0])
+
+    def _save_model(self):
+        pickle.dump(self, open(self._model_file_path, 'bw+'))
+
+    @staticmethod
+    def load_model(model_file_path):
+        class CustomUnpickler(pickle.Unpickler):
+            def find_class(self, module, name):
+                if name == 'Memory':
+                    from dqn import Memory
+                    return Memory
+                if name == 'TetrisGame':
+                    from dqn import TetrisGame
+                    return TetrisGame
+                if name == 'DQNetwork':
+                    from dqn import DQNetwork
+                    return DQNetwork
+                if name == 'DQN':
+                    from dqn import DQN
+                    return DQN
+                return super().find_class(module, name)
+        pickle_data = CustomUnpickler(open(model_file_path, 'rb')).load()
+        return pickle_data
 
     def _epsilon_threshold(self):
         threshold = self._epsilon_end + (self._epsilon_start - self._epsilon_end) * math.exp(-1. * self._n_games / self._epsilon_decay)
@@ -171,7 +198,7 @@ class DQN:
         if random.random() < self._epsilon_threshold():
             index = random.randint(0, len(actions) - 1)
         else:
-            ratings = [(index, self._q(action)) for index, action in enumerate(actions)]
+            ratings = [(index, self.evaluate(action)) for index, action in enumerate(actions)]
             ratings.sort(key=lambda x: x[1])
             index = ratings[0][0]
         return actions[index]
@@ -183,28 +210,30 @@ class DQN:
         # for transition in transitions:
         #     target_value = torch.Tensor([transition.reward])
         #     if transition.possible_actions:
-        #         max_q_value = max([self._q(action) for action in transition.possible_actions])
+        #         max_q_value = max([self.evaluate(action) for action in transition.possible_actions])
         #         target_value = target_value + self._gamma * max_q_value
         #     target_values.append(target_value.reshape(-1))
-        #     q_values.append(self._q(transition.action).reshape(-1))
+        #     q_values.append(self.evaluate(transition.action).reshape(-1))
         # loss = F.smooth_l1_loss(torch.cat(q_values), torch.cat(target_values))
-        non_final_mask = torch.ByteTensor(tuple(map(lambda t: bool(t.possible_actions), transitions)))
         states = []
-        non_final_states = []
         for transition in transitions:
             board = transition.action.get_resulting_board()
             state = torch.FloatTensor(board[None, None, :, :])
-            if transition.possible_actions:
-                non_final_states.append(state)
             states.append(state)
         with torch.no_grad():
-            non_final_next_states = torch.autograd.Variable(torch.cat(non_final_states), volatile=True)
-            max_q_values = torch.autograd.Variable(torch.zeros(len(transitions)).type(torch.FloatTensor))
-            max_q_values[non_final_mask] = self._network(non_final_next_states).max()
+            max_q_values = []
+            for transition in transitions:
+                if transition.possible_actions:
+                    next_states = torch.cat([torch.FloatTensor(action.get_resulting_board()[None, None, :, :]) for action in transition.possible_actions])
+                    q_values = self._network(next_states)
+                    max_q_values.append(q_values.max().reshape(-1))
+                else:
+                    max_q_values.append(torch.FloatTensor([0]))
+            max_q_values = torch.cat(max_q_values)
             rewards = torch.autograd.Variable(torch.cat([torch.FloatTensor([t.reward]) for t in transitions]))
-            target_valuess = (max_q_values * self._gamma) + rewards
+            target_values = (max_q_values * self._gamma) + rewards
         q_values = self._network(torch.autograd.Variable(torch.cat(states)))
-        loss = F.smooth_l1_loss(q_values, target_valuess)
+        loss = F.smooth_l1_loss(q_values, target_values)
         self._optimizer.zero_grad()
         loss.backward()
         self._optimizer.step()
@@ -229,9 +258,10 @@ class DQN:
             print(reward)
             self._memory.push(action, possible_actions, reward)
             self._train_on_minibatch()
+            if epoch % 100 == 0:
+                self._save_model()
 
 
 if __name__ == "__main__":
-    model_file_path = "dqn_model.pickle"
-    dqn = DQN(model_file_path)
+    dqn = DQN()
     dqn.train()
