@@ -2,12 +2,14 @@ from engine import TetrisEngine
 import time
 import random
 import numpy as np
-import dqn_agent
+# import dqn_agent
 from torch.autograd import Variable
 import torch
 import pickle
-import dqn
+# import dqn
 import itertools
+from multiprocessing import Pool
+import functools
 
 
 use_cuda = torch.cuda.is_available()
@@ -38,11 +40,9 @@ class Strategy:
         return score
 
     def ave_score(self, width=10, height=20, n_sim=10000):
-        scores = []
-        for i in range(n_sim):
-            score = self.run(simulation=True)
-            scores.append(score)
-            print(f'{i}: {score} ({np.mean(scores)})')
+        with Pool(10) as pool:
+            scores = pool.map(functools.partial(self.run, 10, 20), [True] * n_sim)
+        print(f'scores: {np.mean(scores)} ({scores})')
         return np.mean(scores)
 
 
@@ -64,8 +64,9 @@ class RandomStrategy(Strategy):
 
 
 class Evaluator:
-    def __init__(self):
+    def __init__(self, params):
         self._array = None
+        self._params = params
 
     def _calc_n_enclosed_squares(self, board):
         n_empty_from_top = 0
@@ -95,7 +96,8 @@ class Evaluator:
             self._array = np.array([(engine.board.shape[1] - x - 1) ** 2 for x in range(engine.board.shape[1])])
         n_enclosed_squares = self._calc_n_enclosed_squares(engine.board.T)
         n_enclosed = self._get_num_squares_enclosed(engine.board.T)
-        return -engine.board.sum(axis=0).dot(self._array) - 999999 * engine.n_deaths - 100 * n_enclosed_squares - 10 * n_enclosed
+        p = self._params
+        return -p[0] * engine.board.sum(axis=0).dot(self._array) - p[1] * engine.n_deaths - p[2] * n_enclosed_squares - p[3] * n_enclosed
 
 
 class MCStrategy(Strategy):
@@ -147,7 +149,7 @@ class BeamSearchStrategy(Strategy):
 
     def __init__(self, beam_width=500, evaluator=None):
         self._beam_width = beam_width
-        self._evaluator = Evaluator() if evaluator is None else evaluator
+        self._evaluator = Evaluator([1, 9999, 100, 10]) if evaluator is None else evaluator
         self._actions = []
 
     def _search(self, nodes):
@@ -236,12 +238,51 @@ class DQNStrategy(Strategy):
             return action.action
 
 
+def smac_opt():
+    # Import ConfigSpace and different types of parameters
+    from smac.configspace import ConfigurationSpace
+    from ConfigSpace.hyperparameters import UniformFloatHyperparameter
+    # Import SMAC-utilities
+    from smac.scenario.scenario import Scenario
+    from smac.facade.smac_bo_facade import SMAC4BO
+
+    def fun_to_optimize(x):
+        params = [x[f'x{i}'] for i in range(0, 4)]
+        print(f'params:{params}')
+        strategy = BeamSearchStrategy(evaluator=Evaluator(params))
+        ret = -strategy.ave_score(n_sim=10)
+        print(ret)
+        return ret
+
+    cs = ConfigurationSpace()
+    x0 = UniformFloatHyperparameter("x0", 0, 100, default_value=1)
+    x1 = UniformFloatHyperparameter("x1", 0, 100, default_value=1)
+    x2 = UniformFloatHyperparameter("x2", 0, 100, default_value=1)
+    x3 = UniformFloatHyperparameter("x3", 0, 100, default_value=1)
+    cs.add_hyperparameters([x0, x1, x2, x3])
+
+    # Scenario object
+    scenario = Scenario({"run_obj": "quality",   # we optimize quality (alternatively runtime)
+                         "runcount-limit": 1000,   # max. number of function evaluations; for this example set to a low number
+                         "cs": cs,               # configuration space
+                         "deterministic": "false"
+                         })
+
+    # Example call of the function
+    # It returns: Status, Cost, Runtime, Additional Infos
+    def_value = fun_to_optimize(cs.get_default_configuration())
+    print("Default Value: %.2f" % def_value)
+
+    # Optimize, using a SMAC-object
+    smac = SMAC4BO(scenario=scenario,
+                   rng=np.random.RandomState(42),
+                   tae_runner=fun_to_optimize,
+                   )
+
+    smac.optimize()
+
+
 if __name__ == "__main__":
-    # strategy = DQNModelStrategy()
-    # print(strategy.ave_score(n_sim=100))
-    # strategy = BeamSearchStrategy()
-    # strategy = DQNStrategy(model_file_path='DQNFeedForwardNetwork.pkl')
-    strategy = DQNStrategy(model_file_path='DQNFeedForwardNetwork_holding.pkl')
-    # strategy = RandomStrategy(avoid_death=True)
-    strategy.run()
-    # print(strategy.ave_score(n_sim=100))
+    # smac_opt()
+    strategy = BeamSearchStrategy(evaluator=Evaluator([0.1, 100, 10, 2]))
+    strategy.ave_score(n_sim=10)
