@@ -10,6 +10,7 @@ import pickle
 import itertools
 from multiprocessing import Pool
 import functools
+import os
 
 
 use_cuda = torch.cuda.is_available()
@@ -245,6 +246,9 @@ def smac_opt():
     # Import SMAC-utilities
     from smac.scenario.scenario import Scenario
     from smac.facade.smac_bo_facade import SMAC4BO
+    from smac.stats.stats import Stats
+    from smac.runhistory.runhistory import RunHistory
+    from smac.utils.io.traj_logging import TrajLogger
 
     def fun_to_optimize(x):
         params = [x[f'x{i}'] for i in range(0, 4)]
@@ -263,7 +267,7 @@ def smac_opt():
 
     # Scenario object
     scenario = Scenario({"run_obj": "quality",   # we optimize quality (alternatively runtime)
-                         "runcount-limit": 1000,   # max. number of function evaluations; for this example set to a low number
+                         "runcount-limit": 999999,   # max. number of function evaluations; for this example set to a low number
                          "cs": cs,               # configuration space
                          "deterministic": "false"
                          })
@@ -273,10 +277,28 @@ def smac_opt():
     def_value = fun_to_optimize(cs.get_default_configuration())
     print("Default Value: %.2f" % def_value)
 
+    old_output_dir = os.path.expanduser("smac3-output_2019-10-01_19:09:12_849207/run_1935803228/")
+
+    rh_path = os.path.join(old_output_dir, "runhistory.json")
+    runhistory = RunHistory(aggregate_func=None)
+    runhistory.load_json(rh_path, scenario.cs)
+    # ... stats, ...
+    stats_path = os.path.join(old_output_dir, "stats.json")
+    stats = Stats(scenario)
+    stats.load(stats_path)
+    # ... and trajectory.
+    traj_path = os.path.join(old_output_dir, "traj_aclib2.json")
+    trajectory = TrajLogger.read_traj_aclib_format(
+        fn=traj_path, cs=scenario.cs)
+    incumbent = trajectory[-1]["incumbent"]
+
     # Optimize, using a SMAC-object
     smac = SMAC4BO(scenario=scenario,
                    rng=np.random.RandomState(42),
                    tae_runner=fun_to_optimize,
+                   runhistory=runhistory,
+                   stats=stats,
+                   restore_incumbent=incumbent,
                    )
 
     smac.optimize()
@@ -284,5 +306,6 @@ def smac_opt():
 
 if __name__ == "__main__":
     # smac_opt()
-    strategy = BeamSearchStrategy(evaluator=Evaluator([0.1, 100, 10, 2]))
-    strategy.ave_score(n_sim=10)
+    strategy = BeamSearchStrategy(evaluator=Evaluator([1.3737181751809944, 27.285650098591436, 99.9951369844601, 44.74908917400367]))
+    strategy.run()
+    # strategy.ave_score(n_sim=10)
